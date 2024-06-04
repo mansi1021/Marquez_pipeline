@@ -7,9 +7,39 @@ terraform {
 }
 
 provider "aws" {
-  region = "ap-south-1"
+  region     = "ap-south-1"
   access_key = var.aws_access_key
   secret_key = var.aws_secret_key
+}
+
+# Create a VPC
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "main-vpc"
+  }
+}
+
+# Create Subnets
+resource "aws_subnet" "subnet_1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "ap-south-1a"
+
+  tags = {
+    Name = "subnet-1"
+  }
+}
+
+resource "aws_subnet" "subnet_2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "ap-south-1b"
+
+  tags = {
+    Name = "subnet-2"
+  }
 }
 
 # IAM Role for EKS
@@ -45,7 +75,7 @@ resource "aws_eks_cluster" "Cluster1" {
   role_arn = aws_iam_role.eks_iam_role.arn
 
   vpc_config {
-    subnet_ids = [var.subnet_id_1, var.subnet_id_2]
+    subnet_ids = [aws_subnet.subnet_1.id, aws_subnet.subnet_2.id]
   }
 
   depends_on = [
@@ -95,7 +125,7 @@ resource "aws_eks_node_group" "worker_node_group" {
   cluster_name    = aws_eks_cluster.Cluster1.name
   node_group_name = "workernodes"
   node_role_arn   = aws_iam_role.workernodes.arn
-  subnet_ids      = [var.subnet_id_1, var.subnet_id_2]
+  subnet_ids      = [aws_subnet.subnet_1.id, aws_subnet.subnet_2.id]
   instance_types  = ["t3.xlarge"]
 
   scaling_config {
@@ -116,7 +146,7 @@ resource "aws_eks_node_group" "worker_node_group" {
 resource "aws_security_group" "rds_sg" {
   name        = "rds-security-group"
   description = "Allow PostgreSQL traffic"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 5432
@@ -136,7 +166,7 @@ resource "aws_security_group" "rds_sg" {
 # RDS Subnet Group
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name       = "rds-subnet-group"
-  subnet_ids = [var.subnet_id_1, var.subnet_id_2]
+  subnet_ids = [aws_subnet.subnet_1.id, aws_subnet.subnet_2.id]
 
   tags = {
     Name = "rds-subnet-group"
